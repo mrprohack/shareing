@@ -1,0 +1,40 @@
+set -e
+
+DMG="$HOME/Downloads/Firefox-45.9.0esr.dmg"
+URL="https://ftp.mozilla.org/pub/firefox/releases/45.9.0esr/mac/en-US/Firefox%2045.9.0esr.dmg"
+EXPECTED="99eac8c2718ecc14e670655fbb0413486a89f84107be12ab3284a386be3f45de72c53706818b8ac13b82be406348a48f65772aee966cb745a9137148172673a3"
+
+# Download from Mozilla
+mkdir -p "$HOME/Downloads"
+curl -fL --retry 3 -o "$DMG" "$URL"
+
+# Verify Mozilla's SHA-512 checksum
+ACTUAL="$(openssl dgst -sha512 "$DMG" | awk '{print $NF}')"
+
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+    echo "Checksum mismatch. Deleting unsafe/incomplete download."
+    rm -f "$DMG"
+    exit 1
+fi
+
+echo "Checksum verified."
+
+# Mount the disk image
+MOUNT="$(mktemp -d /tmp/firefox.XXXXXX)"
+hdiutil attach "$DMG" -nobrowse -mountpoint "$MOUNT"
+
+# Preserve any existing Firefox installation
+if [ -d "/Applications/Firefox.app" ]; then
+    sudo mv "/Applications/Firefox.app" \
+        "/Applications/Firefox.app.backup-$(date +%Y%m%d-%H%M%S)"
+fi
+
+# Install Firefox
+sudo ditto "$MOUNT/Firefox.app" "/Applications/Firefox.app"
+
+# Unmount and clean up
+hdiutil detach "$MOUNT"
+rmdir "$MOUNT"
+
+# Launch Firefox
+open "/Applications/Firefox.app"
